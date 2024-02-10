@@ -19,7 +19,6 @@ from Estimator.estimator import estimate,ce_estimator
 logging.getLogger("pyro").setLevel(logging.DEBUG)
 logging.getLogger("pyro").handlers[0].setLevel(logging.DEBUG)
 
-# CPU강제 사용
 # os.environ["CUDA_VISIBLE_DEVICES"] = "-1" 
 
 Models = {
@@ -112,13 +111,7 @@ def experiment_Syn(args, repetition, sample_size):
             (pd.DataFrame(zt_test)).to_csv(os.path.join(rep_folder, csv_filename_z_test), index=False)
             (pd.DataFrame(zc_train)).to_csv(os.path.join(rep_folder, csv_filename_c_train), index=False)
             (pd.DataFrame(zc_test)).to_csv(os.path.join(rep_folder, csv_filename_c_test), index=False)
-            if not args.highdim:
-                corr_result_zc =  np.corrcoef(np.vstack((x_test.T,zc_test.T)))[-args.latent_dim:,:]
-                corr_result_zt =  np.corrcoef(np.vstack((x_test.T,zt_test.T)))[-args.latent_dim_t:,:]
-                # corr_result_zc_zt =  np.corrcoef(np.vstack((zc_test.T,zt_test.T)))
-                print('zc,d:',np.round(corr_result_zc,2))
-                print('zt,d:', np.round(corr_result_zt,2))
-                # print(np.round(corr_result_zc_zt,2))
+
         elif args.model_id in ['autoiv']:
             Model = Models[args.model_id]
             zt_train,zt_test = Model(train,test,i,args)
@@ -237,7 +230,6 @@ def experiment_Real(args, repetition, target):
             os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
             os.environ["CUDA_VISIBLE_DEVICES"] = f"{args.GPU_id}"
 
-            # model 정의
             Model = Models[args.model_id]
             model = Model(args,device, dataloader_train,dataloader_test)
             #model fit
