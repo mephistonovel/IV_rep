@@ -1,4 +1,3 @@
-# 추가 estimator
 from .Polytsls.polytsls import poly_tsls
 from .Polytsls.polytsls_v2 import poly_tsls_est
 from .Onesiv.onesiv import osiv
@@ -129,7 +128,7 @@ class ce_estimator:
             self.y_hat= self.est(y=Y,t=T,z=Z,C=C,)
 
     def effect_estimate(self):
-        return self.y_hat #MSE
+        return self.y_hat
 
 class ce_estimator_report:
     def __init__(self,est_id,treatment_type,response):
@@ -166,6 +165,6 @@ class ce_estimator_report:
             self.y_hat= np.mean(self.est(y=Y,t=T,z=Z,C=C,))
 
     def effect_estimate(self):
-        return self.y_hat #MSE
+        return self.y_hat
         
             
