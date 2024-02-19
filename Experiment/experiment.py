@@ -13,13 +13,12 @@ from Dataload.dataloader import data_load_syn_low, data_load_syn_high, data_load
 import numpy as np
 from econml.iv.nnet import DeepIV
 import os
-from Estimator.estimator import estimate,ce_estimator
+from Estimator.estimator import estimate_abs,ce_estimator,estimate_report
 # import keras
 
 logging.getLogger("pyro").setLevel(logging.DEBUG)
 logging.getLogger("pyro").handlers[0].setLevel(logging.DEBUG)
 
-# os.environ["CUDA_VISIBLE_DEVICES"] = "-1" 
 
 Models = {
     'dcivvae': DCIVVAE,
@@ -62,7 +61,7 @@ def experiment_Syn(args, repetition, sample_size):
         np.random.seed(i)
         print('rep:',i)
         data_load_syn = dataload[args.highdim]
-        train, dataloader_train, test, dataloader_test, _= data_load_syn(args=args, n_samples= sample_size,
+        train, dataloader_train, test, dataloader_test= data_load_syn(args=args, n_samples= sample_size,
                                                                     batch_size = args.batch_size,cuda = cuda,device =device)
         (x_train, t_train, y_train) = train
         (x_test, t_test, y_test) = test
@@ -70,7 +69,7 @@ def experiment_Syn(args, repetition, sample_size):
         if args.model_id in ['ours']:
             os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
             os.environ["CUDA_VISIBLE_DEVICES"] = f"{args.GPU_id}"
-            # model 정의 
+            # model
             Model = Models[args.model_id]
             model = Model(args,device, dataloader_train,dataloader_test)
             
@@ -111,7 +110,13 @@ def experiment_Syn(args, repetition, sample_size):
             (pd.DataFrame(zt_test)).to_csv(os.path.join(rep_folder, csv_filename_z_test), index=False)
             (pd.DataFrame(zc_train)).to_csv(os.path.join(rep_folder, csv_filename_c_train), index=False)
             (pd.DataFrame(zc_test)).to_csv(os.path.join(rep_folder, csv_filename_c_test), index=False)
-
+            if not args.highdim:
+                corr_result_zc =  np.corrcoef(np.vstack((x_test.T,zc_test.T)))[-args.latent_dim:,:]
+                corr_result_zt =  np.corrcoef(np.vstack((x_test.T,zt_test.T)))[-args.latent_dim_t:,:]
+                # corr_result_zc_zt =  np.corrcoef(np.vstack((zc_test.T,zt_test.T)))
+                print('zc,d:',np.round(corr_result_zc,2))
+                print('zt,d:', np.round(corr_result_zt,2))
+                # print(np.round(corr_result_zc_zt,2))
         elif args.model_id in ['autoiv']:
             Model = Models[args.model_id]
             zt_train,zt_test = Model(train,test,i,args)
@@ -139,9 +144,6 @@ def experiment_Syn(args, repetition, sample_size):
             # Train.
             os.environ["CUDA_VISIBLE_DEVICES"] =  "-1"
             pyro.clear_param_store()
-            args.latent_dim_t = 1
-            args.latent_dim = 3
-            args.latent_dim_y = 2 
             
             model = DCIVVAE(feature_dim=args.feature_dim, continuous_dim= args.feature_dim, binary_dim = 0,
                     latent_dim=args.latent_dim, latent_dim_t = args.latent_dim_t, latent_dim_y = args.latent_dim_y,
@@ -184,11 +186,11 @@ def experiment_Syn(args, repetition, sample_size):
         pyro.set_rng_seed(0)
         np.random.seed(0)
         if args.model_id in['ours','UAS','WAS','autoiv']:
-            estimates = estimate(args.treatment,args.response,args.true_effect, zt_train,t_train,y_train,zt_test,t_test,y_test)
+            estimates = estimate_abs(args.treatment,args.response,args.true_effect, zt_train,t_train,y_train,zt_test,t_test,y_test)
             print(estimates)
             result.append(estimates)
         elif args.model_id in ['dcivvae']:
-            estimates = estimate(args.treatment,args.response,args.true_effect, zt_train,t_train,y_train,zt_test,t_test,y_test,x_condition_train = condition_x_train,x_condition_test=condition_x_test)
+            estimates = estimate_abs(args.treatment,args.response,args.true_effect, zt_train,t_train,y_train,zt_test,t_test,y_test,x_condition_train = condition_x_train,x_condition_test=condition_x_test)
             result.append(estimates)
 
         
@@ -230,6 +232,7 @@ def experiment_Real(args, repetition, target):
             os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
             os.environ["CUDA_VISIBLE_DEVICES"] = f"{args.GPU_id}"
 
+            # model 
             Model = Models[args.model_id]
             model = Model(args,device, dataloader_train,dataloader_test)
             #model fit
@@ -330,11 +333,11 @@ def experiment_Real(args, repetition, target):
             condition_x_train = np.hstack((zc_train, zy_train))
             
         if args.model_id in['ours','UAS','WAS','autoiv','oursv2']:
-            estimates = estimate(args.treatment,args.response,args.true_effect, zt_train,t_train,y_train,zt_test,t_test,y_test)
+            estimates = estimate_report(args.treatment,args.response,zt_train,t_train,y_train,zt_test,t_test,y_test)
             print(estimates)
             result.append(estimates)
         elif args.model_id in ['dcivvae']:
-            estimates = estimate(args.treatment,args.response,args.true_effect, zt_train,t_train,y_train,zt_test,t_test,y_test,x_condition_train = condition_x_train,x_condition_test=condition_x_test)
+            estimates = estimate_report(args.treatment,args.response,zt_train,t_train,y_train,zt_test,t_test,y_test,x_condition_train = condition_x_train,x_condition_test=condition_x_test)
             result.append(estimates)
     data_folder = f'./Result/Real'
     if not os.path.exists(data_folder):
