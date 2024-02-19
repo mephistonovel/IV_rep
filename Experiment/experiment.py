@@ -14,7 +14,6 @@ import numpy as np
 from econml.iv.nnet import DeepIV
 import os
 from Estimator.estimator import estimate_abs,ce_estimator,estimate_report
-# import keras
 
 logging.getLogger("pyro").setLevel(logging.DEBUG)
 logging.getLogger("pyro").handlers[0].setLevel(logging.DEBUG)
@@ -39,7 +38,6 @@ def experiment_Syn(args, repetition, sample_size):
     pyro.enable_validation(__debug__)
     torch.set_default_tensor_type('torch.FloatTensor')
 
-    # Generate synthetic data.
     device = torch.device(f'cuda:{args.GPU_id}' if torch.cuda.is_available() else 'cpu')
     cuda = True
 
@@ -69,11 +67,9 @@ def experiment_Syn(args, repetition, sample_size):
         if args.model_id in ['ours']:
             os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
             os.environ["CUDA_VISIBLE_DEVICES"] = f"{args.GPU_id}"
-            # model
             Model = Models[args.model_id]
             model = Model(args,device, dataloader_train,dataloader_test)
             
-            #model fit
             if args.pretrain==True and args.use_flex_enc==True:
                 model.pretrain()
             model.train()
@@ -110,7 +106,11 @@ def experiment_Syn(args, repetition, sample_size):
             (pd.DataFrame(zt_test)).to_csv(os.path.join(rep_folder, csv_filename_z_test), index=False)
             (pd.DataFrame(zc_train)).to_csv(os.path.join(rep_folder, csv_filename_c_train), index=False)
             (pd.DataFrame(zc_test)).to_csv(os.path.join(rep_folder, csv_filename_c_test), index=False)
-
+            if not args.highdim:
+                corr_result_zc =  np.corrcoef(np.vstack((x_test.T,zc_test.T)))[-args.latent_dim:,:]
+                corr_result_zt =  np.corrcoef(np.vstack((x_test.T,zt_test.T)))[-args.latent_dim_t:,:]
+                print('zc,d:',np.round(corr_result_zc,2))
+                print('zt,d:', np.round(corr_result_zt,2))
         elif args.model_id in ['autoiv']:
             Model = Models[args.model_id]
             zt_train,zt_test = Model(train,test,i,args)
@@ -134,8 +134,6 @@ def experiment_Syn(args, repetition, sample_size):
             
         elif args.model_id=='dcivvae':
                     
-            ### DVAE.CIV Rep Learning ###  
-            # Train.
             os.environ["CUDA_VISIBLE_DEVICES"] =  "-1"
             pyro.clear_param_store()
             
@@ -204,7 +202,6 @@ def experiment_Syn(args, repetition, sample_size):
 def experiment_Real(args, repetition, target):
     pyro.enable_validation(__debug__)
     torch.set_default_tensor_type('torch.FloatTensor')
-    # Generate synthetic data.
     device = torch.device(f'cuda:{args.GPU_id}' if torch.cuda.is_available() else 'cpu')
     cuda = True
     print(device)
@@ -226,10 +223,8 @@ def experiment_Real(args, repetition, target):
             os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
             os.environ["CUDA_VISIBLE_DEVICES"] = f"{args.GPU_id}"
 
-            # model 
             Model = Models[args.model_id]
             model = Model(args,device, dataloader_train,dataloader_test)
-            #model fit
             if args.pretrain==True and args.use_flex_enc==True:
                 model.pretrain()
             model.train()
@@ -282,8 +277,6 @@ def experiment_Real(args, repetition, target):
             y_test = y_test.cpu().detach().numpy().astype(np.float32)
         elif args.model_id=='dcivvae':
                     
-            ### DVAE.CIV Rep Learning ###  
-            # Train.
             pyro.clear_param_store()
             args.latent_dim_t = 1
             args.latent_dim = 3
