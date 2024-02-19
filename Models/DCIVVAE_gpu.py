@@ -423,20 +423,15 @@ class TraceCausalEffect_ELBO(Trace_ELBO):
                          if site["type"] == "sample" and site["is_observed"]]
         blocked_guide_trace = guide_trace.copy()
         
-        # 't','y'에 대해서는 일반적인 loss 구할 때에는 제외 
         for name in blocked_names:
             del blocked_guide_trace.nodes[name]
         
-        # 원래 VAE에서의 loss ('t', 'y'제외한)
         loss, surrogate_loss = super()._differentiable_loss_particle(
             model_trace, blocked_guide_trace)
 
-        # t,y에 대한 auxiliary Loss추가 (log q 추가)
         for name in blocked_names:
             log_q = guide_trace.nodes[name]["log_prob_sum"]
-            
-            # log_q = Tensor(-621.5601)
-            # torch_item(log_q) = -621.5601 즉, 1원소짜리 텐서, 일반숫자로 빼주기 
+
             
             loss = loss - 100 * torch_item(log_q)
             surrogate_loss = surrogate_loss - 100 * log_q
@@ -614,7 +609,6 @@ class DCIVVAE(nn.Module):
         :param float weight_decay: Weight decay. Defaults to 1e-4.
         :return: list of epoch losses
         """
-        # 이 assertion은 일단은 주석처리...굳이 covariates dim=2일 필요는 없을듯
         assert x.dim() == 2 and x.size(-1) == self.feature_dim
         assert t.shape == x.shape[:1]
         assert y.shape == y.shape[:1]
