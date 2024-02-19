@@ -9,7 +9,6 @@ from scipy.spatial.distance import cdist
 
 logger = logging.getLogger()
 
-##############################################   data_class.py   #######################
 class TrainDataSet(NamedTuple):
     treatment: np.ndarray
     instrumental: np.ndarray
@@ -92,7 +91,6 @@ class TestDataSetTorch(NamedTuple):
                                 outcome=outcome,
                                 structural=self.structural.cuda())
 
-#################################  model.py    ############################
 class KernelIVModel:
 
     def __init__(self, X_train: np.ndarray, alpha: np.ndarray, sigma: float):
@@ -144,7 +142,6 @@ class KernelIVModel:
         pred = self.predict(test_data.treatment, test_data.covariate)
         return np.mean((test_data.structural - pred)**2)
 
-############## trainer.py ##############
 def get_median(X) -> float:
     if len(X.shape)<2:
         X=X.reshape(-1,1)
@@ -188,14 +185,11 @@ class KernelIVTrainer:
         oos_result : float
             The performance of model evaluated by oos
         """
-        ### data-> train, test 
         train_data = self.data_list[0]
         test_data = self.data_list[2]
         
-        ### train_data split 
         train_1st_data, train_2nd_data = self.split_train_data(train_data)
 
-        # get stage1 data
         X1 = train_1st_data.treatment
         if train_1st_data.covariate is not None:
             X1 = np.concatenate([X1, train_1st_data.covariate], axis=-1)
@@ -203,7 +197,6 @@ class KernelIVTrainer:
         Y1 = train_1st_data.outcome
         N = X1.shape[0]
 
-        # get stage2 data
         X2 = train_2nd_data.treatment
         if train_2nd_data.covariate is not None:
             X2 = np.concatenate([X2, train_2nd_data.covariate], axis=-1)
@@ -245,7 +238,6 @@ class KernelIVTrainer:
         else:
             A_pseudoinv = np.linalg.pinv(W.dot(W.T) + M * self.lambda2 * KX1X1)
 
-            # alpha = np.linalg.solve(W.dot(W.T) + M * self.lambda2 * KX1X1, W.dot(Y2))
             alpha= np.dot(A_pseudoinv,W.dot(Y2))
 
         if verbose > 0:
@@ -273,17 +265,14 @@ class KernelIVTrainer:
         A = W.dot(W.T)
         
         alpha_list = [np.dot(np.linalg.pinv(A+M*lam2*KX1X1),b) for lam2 in self.lambda2]
-        # alpha_list = [np.linalg.solve(A + M * lam2 * KX1X1, b) for lam2 in self.lambda2]
         score = [np.linalg.norm(Y1 - KX1X1.dot(alpha)) for alpha in alpha_list]
         self.lambda2 = self.lambda2[np.argmin(score)]
         return alpha_list[np.argmin(score)]
 
 def kiv_est(y,t,z,C=None):
-    # set_seed(train_dict['seed'])
     logfile, _logfile = './dd.txt', './ddd.txt'
 
     use_gpu = False
-    # one_dump_dir = resultDir+'/hello'
     num = 1000
 
     train_config = {'lam1': [-2, -10],
@@ -292,7 +281,6 @@ def kiv_est(y,t,z,C=None):
 
     verbose = 1
 
-    # print(f"Run {exp}/{train_dict['reps']}")
     y = torch.from_numpy(y)
     t = torch.from_numpy(t)
     z = torch.from_numpy(z) if isinstance(z, np.ndarray) else z
@@ -310,7 +298,6 @@ def kiv_est(y,t,z,C=None):
     validation_ratio = 0.2
     test_ratio = 0.2
 
-    # 데이터를 train, validation 및 test 세트로 분할
     total_samples = len(data)
     train_split = int(total_samples * train_ratio)
     validation_split = int(total_samples * (train_ratio + validation_ratio))
@@ -327,13 +314,11 @@ def kiv_est(y,t,z,C=None):
                                     outcome=train_data[:num,-2],
                                     structural=train_data[:num,-1])
         val_data = TrainDataSet(treatment=validation_data[:,-3],
-                                    # instrumental=cat([data.valid.z, data.valid.x]),
                                     instrumental = validation_data[:,:-3],
                                     covariate=None,
                                     outcome=validation_data[:,-2],
                                     structural=validation_data[:,-1])
         test_data = TestDataSet(treatment=test_data[:,-3],
-                                    # instrumental=cat([data.test.z, data.test.x]),
                                     instrumental=test_data[:,:-3],
                                     covariate=None,
                                     outcome=test_data[:,-2],
@@ -345,16 +330,13 @@ def kiv_est(y,t,z,C=None):
                                 outcome=train_data[:num,-2],
                                 structural=train_data[:num,-1])
         val_data = TrainDataSet(treatment=validation_data[:,-3],
-                                    # instrumental=cat([data.valid.z, data.valid.x]),
                                     instrumental = validation_data[:,:-3],
                                     covariate=validation_data[:,z.shape[1]:-3],
                                     outcome=validation_data[:,-2],
                                     structural=validation_data[:,-1])
         test_data = TestDataSet(treatment=test_data[:,-3],
-                                    # instrumental=cat([data.test.z, data.test.x]),
                                     instrumental=test_data[:,:-3],
                                     covariate=test_data[:num,z.shape[1]:-3],
-                                    # covariate=data.test.x,
                                     outcome=test_data[:,-2],
                                     structural=test_data[:,-1])
         
