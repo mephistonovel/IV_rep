@@ -1,4 +1,3 @@
-# from utils import set_seed, cat
 from typing import NamedTuple, Dict, Any, Optional, List
 import numpy as np
 import torch
