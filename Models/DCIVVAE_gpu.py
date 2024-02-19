@@ -267,7 +267,6 @@ class DiagBernoulliNet(nn.Module):
 class PreWhitener(nn.Module):
     """
     Data pre-whitener.
-    데이터 정규화
     """
 
     def __init__(self, data):
