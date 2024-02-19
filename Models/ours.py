@@ -22,7 +22,6 @@ def weights_init_normal(m):
         torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
 
 class Ours:
-    # mp.set_start_method('fork') 
     """This is the trainer for the Variational Deep Embedding (VaDEIV).
     """
 
@@ -50,7 +49,7 @@ class Ours:
         and the models are likely to get stuck in local minima.
         """
         optimizer = optim.Adam(self.autoencoder.parameters(), lr=0.002)
-        self.autoencoder.apply(weights_init_normal) #intializing weights using normal distribution.
+        self.autoencoder.apply(weights_init_normal)
         self.autoencoder.train()
         print('Training the autoencoder...')
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -63,14 +62,14 @@ class Ours:
                 x = x.to(self.device)
                 x= x.to(torch.float32)
                 x_hat = self.autoencoder(x)
-                loss = F.mse_loss(x_hat, x) # just reconstruction
+                loss = F.mse_loss(x_hat, x)
                 loss=loss.to(torch.float32)
                 loss.backward()
                 optimizer.step()
                 total_loss += loss.item()
             print('Training Autoencoder... Epoch: {}, Loss: {}'.format(epoch, total_loss))
-        self.train_GMM() #training a GMM for initialize the VaDEIV
-        self.save_weights_for_VaDEIV() #saving weights for the VaDEIV
+        self.train_GMM()
+        self.save_weights_for_VaDEIV()
 
 
     def train_GMM(self):
@@ -80,10 +79,9 @@ class Ours:
         """
         print('Fiting Gaussian Mixture Model...')
 
-        x = torch.cat([data[0] for data in self.dataloader_train]).to(self.device) #all x samples.
+        x = torch.cat([data[0] for data in self.dataloader_train]).to(self.device)
         zc = self.autoencoder.encode_zc(x)
         
-        #gmm1
         self.gmm1 = GaussianMixture(n_components=self.args.comp_num_zc, covariance_type='diag')
         self.gmm1.fit(zc.cpu().detach().numpy())
         
@@ -113,11 +111,8 @@ class Ours:
         self.optimizer = optim.Adam(self.VaDEIV.parameters(), lr=self.args.lr)
         lr_scheduler = torch.optim.lr_scheduler.StepLR(
                     self.optimizer, step_size=10, gamma=0.9)
-        # lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-        #     self.optimizer, gamma=0.9, last_epoch=-1, verbose=False)
         print('Training VaDEIV...')
         
-        ## early stopping ## 
         best_loss = 1e37
         if self.args.highdim:
             early_stopping_epochs = 10
@@ -182,57 +177,46 @@ class VaDEIV(torch.nn.Module):
             self.log_var_prior_zc = Parameter(torch.randn(n_classes_zc, latent_dim_zc))
         
         
-        ## Encoder for zc q(zc|d)
         self.enc_zc1 = nn.Linear(feature_dim, self.hidden_dim) 
         self.enc_zc2 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.enc_zc3 = nn.Linear(self.hidden_dim, self.hidden_dim) 
-        self.mu_zc = nn.Linear(self.hidden_dim, latent_dim_zc) #Latent mu
-        self.log_var_zc = nn.Linear(self.hidden_dim, latent_dim_zc) #Latent logvar
+        self.mu_zc = nn.Linear(self.hidden_dim, latent_dim_zc)
+        self.log_var_zc = nn.Linear(self.hidden_dim, latent_dim_zc)
         
-        ## Encoder for q(zt|d) #pretrain here
         self.enc_zt1 = nn.Linear(feature_dim,self.hidden_dim) 
         self.enc_zt2 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.enc_zt3 = nn.Linear(self.hidden_dim, self.hidden_dim) 
-        self.mu_zt = nn.Linear(self.hidden_dim, latent_dim_zt) #Latent mu
-        self.log_var_zt = nn.Linear(self.hidden_dim, latent_dim_zt) #Latent logvar
+        self.mu_zt = nn.Linear(self.hidden_dim, latent_dim_zt)
+        self.log_var_zt = nn.Linear(self.hidden_dim, latent_dim_zt)
         
-        ## prior p(zt|D)
         self.prior_zt1 = nn.Linear(feature_dim,self.hidden_dim) 
         self.prior_zt2 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.prior_zt3 = nn.Linear(self.hidden_dim, self.hidden_dim)         
-        self.prior_mu_zt = nn.Linear(self.hidden_dim, latent_dim_zt) #Latent mu
-        self.prior_log_var_zt = nn.Linear(self.hidden_dim, latent_dim_zt) #Latent logvar
+        self.prior_mu_zt = nn.Linear(self.hidden_dim, latent_dim_zt)
+        self.prior_log_var_zt = nn.Linear(self.hidden_dim, latent_dim_zt)
         
-        ## Decoder p(d|zc,zt)
         self.reconx1= nn.Linear((latent_dim_zc+latent_dim_zt),self.hidden_dim) 
         self.reconx2 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.reconx3 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.mu_x = nn.Linear(self.hidden_dim, feature_dim) 
         
-        ### treatment dist.  p(t|zc) ==p(x|z) ### CE ID 
         if self.use_dist_net:
             self.treatment_logit = nn.Linear(latent_dim_zt,1)  
             
-            # b: continuous -> MS
             self.cont_dist = nn.Linear((latent_dim_zt),self.hidden_dim)
             self.treatment_mu = nn.Linear(self.hidden_dim, 1)
             self.treatment_logvar = nn.Linear(self.hidden_dim, 1)
         
         if self.use_reg_net:
-             #Treatment net f(t|zc,zt)
             self.treg1 = nn.Linear((latent_dim_zc+latent_dim_zt),self.hidden_dim)
             self.treg2 = nn.Linear(self.hidden_dim, 1)
-            ## t: binary
-            #Outcome Net f(y|t,zt) == f(y|x,c)
             self.yreg_t1_1 = nn.Linear((latent_dim_zc), self.hidden_dim) 
             self.yreg_t1_2 = nn.Linear(self.hidden_dim, self.hidden_dim)
             self.y_mu_1= nn.Linear(self.hidden_dim, 1) 
     
-            #t=0 Net
             self.yreg_t0_1 = nn.Linear((latent_dim_zc), self.hidden_dim) 
             self.yreg_t0_2 = nn.Linear(self.hidden_dim, self.hidden_dim)
             
-            ## t=continuous 
             self.yreg_con1 = nn.Linear((latent_dim_zc+1), self.hidden_dim) 
             self.y_mu_0 = nn.Linear(self.hidden_dim, 1) 
         
@@ -248,7 +232,6 @@ class VaDEIV(torch.nn.Module):
         x= x.to(torch.float32)
         x = x+1e-6 
         h = F.relu(self.enc_zt1(x))
-        # h = F.relu(self.enc_zt2(h))
         h = F.relu(self.enc_zt3(h))
         return self.mu_zt(h), self.log_var_zt(h).clamp(min=-1, max=5)
     
@@ -273,7 +256,6 @@ class VaDEIV(torch.nn.Module):
         z = torch.cat((zc,zt),-1)
         h = F.relu(self.treg1(z))
         
-        ### Treatment: Binary ###
         if self.treatment_type=='b':
             h = F.relu(self.treg2(h))
             tvector = torch.nn.Sigmoid()(h)
@@ -284,7 +266,6 @@ class VaDEIV(torch.nn.Module):
     
     def treatment(self, zt):
         zt = zt.to(torch.float32)
-        ### Treatment: Binary ###
         if self.treatment_type == 'b':
             logit = self.treatment_logit(zt)
             return logit
@@ -307,16 +288,13 @@ class VaDEIV(torch.nn.Module):
             t1_index = (t==1).nonzero(as_tuple=True)[0]
             t0_index = (t==0).nonzero(as_tuple=True)[0]
               
-            # t=1 net
             
             c1 = c[t1_index]
             c0 = c[t0_index]        
-            # t=1 net
             h1 = F.relu(self.yreg_t1_1(c1))       
             h1 = F.relu(self.yreg_t1_2(h1))
             y_mu1 = self.y_mu_1(h1)
             
-            #t=0 Net 
             h0 = F.relu(self.yreg_t0_1(c0))
             h0 = F.relu(self.yreg_t0_2(h0))
             y_mu0= self.y_mu_0(h0)
@@ -324,7 +302,6 @@ class VaDEIV(torch.nn.Module):
             return (y_mu1, y_mu0)
         
         elif self.treatment_type=='con':
-            # t = t.unsqueeze(1)
             inp = torch.cat((c,t),-1)
             h1 = F.relu(self.yreg_con1(inp))       
             h1 = F.relu(self.yreg_t1_2(h1))
@@ -335,7 +312,6 @@ class VaDEIV(torch.nn.Module):
     def analysis(self, x):
         x = x.to(torch.float32).requires_grad_(True)
         x = x + 1e-6
-        # Forward pass
         h = F.relu(self.enc_zt1(x))
         h = F.relu(self.enc_zt3(h))
         mu_zt = self.mu_zt(h)
@@ -367,22 +343,17 @@ class VaDEIV(torch.nn.Module):
         
         prior_mu_zt, prior_log_var_zt = self.prior_zt(x)
         
-        # ec = self.encode_ec(x,mu_zt)
         zc = self.reparameterize(mu_zc, log_var_zc)
         zt = self.reparameterize(mu_zt, log_var_zt)
-        # zt_prior = self.reparameterize(prior_mu_zt,prior_log_var_zt)
         
-        # reconstruct x (d)
         x_hat = self.decode(zc,zt)
         
-        # auxiliary loss t|zc,zt , y|t,zt 
         if self.use_dist_net and self.use_reg_net:
             if self.treatment_type == 'b':
-                logit_t = self.treatment(zt) # p(t|zc)
+                logit_t = self.treatment(zt)
                 t_sample = dist.Bernoulli(logits=logit_t).sample()
-                t_rep = self.treatment_net(zc,zt)# f(t|zc,zt)
+                t_rep = self.treatment_net(zc,zt)
                 
-                # y|zt,t=observed
                 if self.use_reconst_x:
                     y1_mu, y0_mu = self.outcome(t_sample,zc)
                 else:                    
@@ -390,11 +361,11 @@ class VaDEIV(torch.nn.Module):
                 y_sample =(y1_mu, y0_mu)
             
             elif self.treatment_type =='con':
-                logit_t, log_var_t = self.treatment(zt) # p(t|zc) 
-                t_rep = self.treatment_net(zc,zt)# f(t|zc,zt)
+                logit_t, log_var_t = self.treatment(zt)
+                t_rep = self.treatment_net(zc,zt)
                 t_sample = dist.Normal(logit_t,torch.exp(log_var_t/2)).sample()
                 if self.use_reconst_x:
-                    y_sample = self.outcome(t_sample,zc) # f(y|t,zt)
+                    y_sample = self.outcome(t_sample,zc)
                 else:
                     y_sample = self.outcome(t.unsqueeze(1),zc)
                             
@@ -410,25 +381,22 @@ class VaDEIV(torch.nn.Module):
         else:
             x_hat, mu_zc, mu_zt, prior_mu_zt, log_var_zc, log_var_zt, prior_log_var_zt, zc,zt = self.forward(x,t,y)
        
-        # Reconstruction Loss p(x|zc,zt) == p(d|z,c)
         log_p_x_given_z = F.mse_loss(x_hat, x,reduction='sum') 
        
-        # zt loss (loss related to confounding rep C)= KL[q(C|D)||P(C|D)]
         kl_zt = self.kld(mu_zt,log_var_zt,prior_mu_zt,prior_log_var_zt)
         
         loss = log_p_x_given_z +kl_zt
         
-        # zc loss 
         if self.use_flex_enc:
-            p_ez_zc = self.pi_prior_zc # p(ez)
+            p_ez_zc = self.pi_prior_zc
             gamma_zc = self.compute_gamma_zc(zc, p_ez_zc)
 
             h_zc = log_var_zc.exp().unsqueeze(1) + (mu_zc.unsqueeze(1) - self.mu_prior_zc).pow(2)
             h_zc = torch.sum(self.log_var_prior_zc + h_zc / self.log_var_prior_zc.exp(), dim=2)
-            log_p_zc_given_c = 0.5 * torch.sum(gamma_zc * h_zc) # log p(zc|ez)
-            log_p_ez_zc = torch.sum(gamma_zc * torch.log(p_ez_zc + 1e-9)) # log p(ez)
-            log_q_ez_zc_given_x = torch.sum(gamma_zc * torch.log(gamma_zc + 1e-9)) # log q(ez,zc|d)
-            log_q_zc_given_x = 0.5 * torch.sum(1 + log_var_zc) # log q(zc|d)
+            log_p_zc_given_c = 0.5 * torch.sum(gamma_zc * h_zc)
+            log_p_ez_zc = torch.sum(gamma_zc * torch.log(p_ez_zc + 1e-9))
+            log_q_ez_zc_given_x = torch.sum(gamma_zc * torch.log(gamma_zc + 1e-9))
+            log_q_zc_given_x = 0.5 * torch.sum(1 + log_var_zc)
             
             zc_loss = (log_p_zc_given_c - log_p_ez_zc +  log_q_ez_zc_given_x - log_q_zc_given_x)
             
@@ -441,7 +409,6 @@ class VaDEIV(torch.nn.Module):
         mi_loss_zc_zt=torch.sum(corr[:self.latent_dim_zc,self.latent_dim_zc:]**2)
         
         
-        # t,y loss (Treatment, Outcome Loss)
         if self.use_dist_net and self.use_reg_net:
             if self.treatment_type =='b':
                 t1_index = (t_sample==1).nonzero(as_tuple=True)[0]
@@ -472,7 +439,6 @@ class VaDEIV(torch.nn.Module):
             
             loss += self.hyp_tdist*log_q_t_given_z+ self.hyp_treg*t_mse + self.hyp_yreg*y_mse
             
-        # Final Loss  
         loss /= x.size(0)
         loss +=self.hyp_mi*mi_loss_zc_zt
         
@@ -501,22 +467,22 @@ class Autoencoder(torch.nn.Module):
         
         self.hidden_dim = hidden_dim
         
-        self.enc_zc1 = nn.Linear(feature_dim, self.hidden_dim) #Encoder
+        self.enc_zc1 = nn.Linear(feature_dim, self.hidden_dim)
         self.enc_zc2 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.enc_zc3 = nn.Linear(self.hidden_dim, self.hidden_dim) 
 
-        self.enc_zt1 = nn.Linear(feature_dim, self.hidden_dim) #Encoder
+        self.enc_zt1 = nn.Linear(feature_dim, self.hidden_dim)
         self.enc_zt2 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.enc_zt3 = nn.Linear(self.hidden_dim, self.hidden_dim) 
 
 
-        self.mu_zc = nn.Linear(self.hidden_dim, latent_dim_zc) #Latent code
-        self.mu_zt = nn.Linear(self.hidden_dim, latent_dim_zt) #Latent code
+        self.mu_zc = nn.Linear(self.hidden_dim, latent_dim_zc)
+        self.mu_zt = nn.Linear(self.hidden_dim, latent_dim_zt)
 
         self.reconx1= nn.Linear((latent_dim_zc+latent_dim_zt), self.hidden_dim) 
         self.reconx2 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.reconx3 = nn.Linear(self.hidden_dim, self.hidden_dim)
-        self.mu_x = nn.Linear(self.hidden_dim, feature_dim) #Latent mu
+        self.mu_x = nn.Linear(self.hidden_dim, feature_dim)
 
     def encode_zc(self, x):
         x= x.to(torch.float32)
